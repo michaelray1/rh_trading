@@ -39,7 +39,8 @@ class statistics():
         """
 
         '''Set up dictionary for the given data point and then
-        populate it with the wanted data'''
+        populate it with the wanted data. Data will go in order
+        from past to present ending with the previous day's data.'''
         num_points = int(len(stock_data)/len(self.inputSymbols))
         dp_dic = {}
         j=0
@@ -63,9 +64,6 @@ class statistics():
         list of stocks
 
         Parameters
-            inputSymbols - Give the list of symbols
-                to calculated bollinger bands for (might be a list
-                with just one item)
             interval - Give the length of time you want the
                 bollinger bands to be calculated over. Default
                 is one day
@@ -87,16 +85,16 @@ class statistics():
 
         '''use the dictionary_data function above to put the data
         into a dictionary so it's easier to use'''
-        high_dic = self.dictionary_data(stock_data, data_point='high')
+        close_dic = self.dictionary_data(stock_data, data_point='close_price')
 
         '''calculate the bollinger bands. Five numbers for each
         entry represent the mean and then one and two standard
         deviations either up or down from the mean'''
         bb_dic = {}
         for i in np.arange(len(self.inputSymbols)):
-            highs = high_dic['{}'.format(self.inputSymbols[i])]
-            mean = np.mean(highs)
-            std = np.std(highs)
+            prices = close_dic['{}'.format(self.inputSymbols[i])]
+            mean = np.mean(prices)
+            std = np.std(prices)
             oneup = mean + std
             onedown = mean - std
             twoup = mean + 2*std
@@ -111,17 +109,16 @@ class statistics():
 
     def moving_average(self, span='year'):
         """Function that computes a moving average of stock prices
-        (daily high or low) over a given time period.
+        (daily closing price) over a given time period.
 
         Parameters
-            inputSymbols - Give the input symbols for the stocks
-                which you want a moving average for. Even if it's
-                just one stock, enter it as a list
             span - Give the length of time over which the moving
                 average should be calculated. Either give
                 day, week, month, 3month, year, or 5year
 
         Returns
+        A dictionary where the keys are stock tickers and the values
+        are the moving average of each stock over the span given.
         """
         
         '''login to robin hood and get stock data for given stocks,
@@ -130,17 +127,15 @@ class statistics():
         stock_data = rh.stocks.get_stock_historicals(inputSymbols=self.inputSymbols, interval='day', span=span)
 
         '''Take the data and put it into a dictionary so it's easy
-        to use. Use the dictionary_data function to do this. Also use
-        stockdata_to_inputsymbols to get a list of stocks that we are
-        working with'''
-        high_dic = self.dictionary_data(stock_data, data_point='high')
+        to use. Use the dictionary_data function to do this. Also use'''
+        close_dic = self.dictionary_data(stock_data, data_point='close_price')
 
-        '''For each stock, get the high data and then take the average.
+        '''For each stock, get the close data and then take the average.
         The span of the average is decide when we pull the data from
         robin hood to get stock_data'''
         mean_dic = {}
         for i in np.arange(len(self.inputSymbols)):
-            data = high_dic['{}'.format(self.inputSymbols[i])]
+            data = close_dic['{}'.format(self.inputSymbols[i])]
             mean = np.mean(data)
             mean_dic['{}'.format(self.inputSymbols[i])] = mean
 
@@ -148,9 +143,107 @@ class statistics():
         return mean_dic
 
 
+    def exp_average(self, data, sigma=7):
+        """Function that computes an exponential average 
+        of data. It takes data, then multiplies by one half of a
+        gaussian curve, then divides by the integral of the
+        gaussian. This results in a weighted average.
+
+        Parameters
+            data - Give a numpy array of any length (but dimension 1)
+                that represents the data you want to compute a
+                weighted average for
+            sigma - Give an integer that represents the standard
+                deviation of your gaussian. Default is 7 (days)
+
+        Returns
+        A numpy array of the same length as data. It is a weighted
+        average of the data with a gaussian applied as the weights.
+        """
+        
+        '''We want x to be the first half of the domain for the gaussian
+        distribution and to be as long as our data is'''
+        x = np.arange(start=-len(data, stop=1, step=1))
+        gaussian = np.e**(-(x**2/(2*sigma**2))))
+        smooth_data = data*gaussian
+        mean = np.sum(smooth_data)/np.sum(gaussian)
+
+        '''return mean_dic'''
+        return mean
+            
+
+    
+    
+    def rsi(self):
+        """Function that calculates the relative strength index for
+        the inputSymbols associated with the statistics object. This
+        calculates the moving average for the rsi calculation over
+        
+
+        Returns
+        A dictionary whose keys are the stock tickers and whose
+        values are the relative strength index of the stock
+        """
+
+        '''login and get stock data'''
+        rh.login(self.un, self.pw)
+        rh.get_stock_historicals(inputSymbols=self.inputSymbols, interval='day', span=span)
+
+        '''Take the data and put it into a dictionary so it's easy
+        to use. Use the dictionary_data function to do this.'''
+        close_dic = self.dictionary_data(stock_data, data_point='close_price')
+
+        '''Create a dictionary for rsi values. This will be filled
+        in the loop below and returned at the end of the function.'''
+        rsi_dic = {}
+
+        '''loop over inputSymbols (stocks)'''
+        for i in np.arange(len(self.inputSymbols)):
+            
+            '''initialize up and down arrays for rsi calculation'''
+            up_array = []
+            down_array = []
+
+            '''loop over the length of the stock data'''
+            for j in np.arange(len(close_dic[self.inputSymbols[i]])):
+
+                '''append the difference in price to up array if the 
+                price went up. append to down array if it went down.
+                if the price stayed the same, append a zero to both.
+                '''
+                if close_dic[self.inputSymbols[i]][j] > close_dic[self.inputSymbols[i]][j-1]:
+                    up_array.append(np.abs(close_dic[self.inputSymbols[i]][j] - close_dic[i][j-1]))
+                    down_array.append(0)
+                elif close_dic[self.inputSymbols[i]][j] < close_dic[self.inputSymbols[i]][j-1]:
+                    up_array.append(0)
+                    down_array.append(np.abs(close_dic[self.inputSymbols[i]][j] - close_dic[i][j-1]))
+                else:
+                    up_array.append(0)
+                    down_array.append(0)
+
+            up_array = np.array(up_array)
+            down_array = np.array(down_array)
+
+            '''compute the exponentially weighted average of up 
+            and down arrays'''
+            up_exp_avg = self.exp_average(data=up_array)
+            down_exp_avg = self.exp_average(data=down_array)
+
+            '''compute the relative strength and relative strength
+            index. Then place the rsi in the rsi dictionary'''
+            rel_strength = up_exp_avg/down_exp_avg
+            rel_strength_index = 100 - (100/(1 - rel_strength))
+
+            rsi_dic[self.inputSymbols[i]] = rel_strength_index
+
+        return rsi_dic
 
 
-Class metrics():
+
+
+
+        
+class metrics():
     """Class whose job is to get True or False values for a
     list of stocks which are not currently in your portfolio. 
     True indicates that we should buy the stock because we
@@ -162,11 +255,13 @@ Class metrics():
         self.statistics = statistics
 
     def bbands(self, num_bands=0, interval='day', span='year'):
-        """Set metrics.bbands = True if the stock is within 
-        num_bands of the bottom band.
-        Sets metrics.bbands = False if the stock is not 
-        within num_bands of the bottom band
-        
+        """Function that compares bollinger bands on a collection
+        of stocks to their current price. Returns a dictionary
+        where the keys are stock tickers and the values are
+        1 if we should buy based on bollinger band assessment,
+        or zero if we shouldn't buy based on bollinger band
+        assessment.
+
         Parameters
         num_bands -  must be an integer between 0 and 4. 
             0 means a buy flag is produced only if the stock 
@@ -200,6 +295,43 @@ Class metrics():
             if float(current_prices[i]) <= bollinger[self.statistics.inputSymbols[i]][num_bands]:
                 boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 1.0
             else:
-                boolean_dic['{}'.format(self.statistics.inputSymbols[i]] = 0.0
+                boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 0.0
+
+        return boolean_dic
+
+
+    def ma(self, short_period='month', long_period='year'):
+        """Function that does an assessment based on long-term
+        vs short-term moving averages. Returns a dictionary where
+        the keys are stock tickers and the values are 1 if the
+        short_period moving average is above the long_period
+        moving average.
+
+        Parameters
+        short_period - Give a string which represents the short
+            time period moving average you want to calculate.
+            Options for the string are day, week, month, 3month,
+            year, or 5year
+        long_period - Give a string which represents the long
+            time period moving average you want to calculate.
+            Options for the string are day, week, month, 3month,
+            year, or 5year
+
+        Returns
+        A dictionary where the keys are the stock tickers associated
+        with the statistics object and the values are 1 if we should
+        buy or 0 if we shouldn't. We buy when the short_period 
+        moving average is above the long_period moving average.
+        """
+
+        short_dic = self.statistics.moving_average(span=short_period)
+        long_dic = self.statistics.moving_average(span=long_period)
+
+        boolean_dic = {}
+        for i in np.arange(len(self.statistics.inputSymbols)):
+            if short_dic['{}'.format(self.statistics.inputSymbols[i])] > long_dic['{}'.format(self.statistics.inputSymbols[i])]:
+                boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 1.0
+            else:
+                boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 0.0
 
         return boolean_dic
