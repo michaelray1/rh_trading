@@ -17,7 +17,7 @@ class statistics():
         self.inputSymbols = inputSymbols
 
         
-    def dictionary_data(stock_data, data_point):
+    def dictionary_data(self, stock_data, data_point):
         """Function that takes in stock data in the form that
         robin hood gives it to you from the get_historical_data
         function and turns it into a dictionary of the form
@@ -55,8 +55,6 @@ class statistics():
 
         '''Return dp_dic'''
         return dp_dic
-
-
         
         
     def bollinger_bands(self, interval='day', span='year'):
@@ -85,7 +83,7 @@ class statistics():
 
         '''use the dictionary_data function above to put the data
         into a dictionary so it's easier to use'''
-        close_dic = self.dictionary_data(stock_data, data_point='close_price')
+        close_dic = self.dictionary_data(stock_data=stock_data, data_point='close_price')
 
         '''calculate the bollinger bands. Five numbers for each
         entry represent the mean and then one and two standard
@@ -104,7 +102,6 @@ class statistics():
 
         '''return the bollinger bands dictionary'''
         return bb_dic
-
 
 
     def moving_average(self, span='year'):
@@ -163,22 +160,27 @@ class statistics():
         
         '''We want x to be the first half of the domain for the gaussian
         distribution and to be as long as our data is'''
-        x = np.arange(start=-len(data, stop=1, step=1))
-        gaussian = np.e**(-(x**2/(2*sigma**2))))
+        x = np.arange(start=-len(data)+1, stop=1, step=1)
+        gaussian = np.e**(-(x**2/(2*sigma**2)))
         smooth_data = data*gaussian
         mean = np.sum(smooth_data)/np.sum(gaussian)
 
         '''return mean_dic'''
         return mean
             
-
     
-    
-    def rsi(self):
+    def rsi(self, span='month', sigma=7):
         """Function that calculates the relative strength index for
         the inputSymbols associated with the statistics object. This
         calculates the moving average for the rsi calculation over
         
+        Parameters
+            span - Give the length of time over which the moving
+                average for getting the rsi should be calculated. 
+                Either give day, week, month, 3month, year, or 5year
+            sigma - Give an integer that is the sigma you want
+                when constructing the gaussian function which
+                smooths the stock data
 
         Returns
         A dictionary whose keys are the stock tickers and whose
@@ -187,11 +189,11 @@ class statistics():
 
         '''login and get stock data'''
         rh.login(self.un, self.pw)
-        rh.get_stock_historicals(inputSymbols=self.inputSymbols, interval='day', span=span)
+        stock_data = rh.get_stock_historicals(inputSymbols=self.inputSymbols, interval='day', span=span)
 
         '''Take the data and put it into a dictionary so it's easy
         to use. Use the dictionary_data function to do this.'''
-        close_dic = self.dictionary_data(stock_data, data_point='close_price')
+        close_dic = self.dictionary_data(stock_data=stock_data, data_point='close_price')
 
         '''Create a dictionary for rsi values. This will be filled
         in the loop below and returned at the end of the function.'''
@@ -212,11 +214,11 @@ class statistics():
                 if the price stayed the same, append a zero to both.
                 '''
                 if close_dic[self.inputSymbols[i]][j] > close_dic[self.inputSymbols[i]][j-1]:
-                    up_array.append(np.abs(close_dic[self.inputSymbols[i]][j] - close_dic[i][j-1]))
+                    up_array.append(np.abs(close_dic[self.inputSymbols[i]][j] - close_dic[self.inputSymbols[i]][j-1]))
                     down_array.append(0)
                 elif close_dic[self.inputSymbols[i]][j] < close_dic[self.inputSymbols[i]][j-1]:
                     up_array.append(0)
-                    down_array.append(np.abs(close_dic[self.inputSymbols[i]][j] - close_dic[i][j-1]))
+                    down_array.append(np.abs(close_dic[self.inputSymbols[i]][j] - close_dic[self.inputSymbols[i]][j-1]))
                 else:
                     up_array.append(0)
                     down_array.append(0)
@@ -226,13 +228,13 @@ class statistics():
 
             '''compute the exponentially weighted average of up 
             and down arrays'''
-            up_exp_avg = self.exp_average(data=up_array)
-            down_exp_avg = self.exp_average(data=down_array)
+            up_exp_avg = self.exp_average(data=up_array, sigma=7)
+            down_exp_avg = self.exp_average(data=down_array, sigma=7)
 
             '''compute the relative strength and relative strength
             index. Then place the rsi in the rsi dictionary'''
             rel_strength = up_exp_avg/down_exp_avg
-            rel_strength_index = 100 - (100/(1 - rel_strength))
+            rel_strength_index = 100 - (100/(1 + rel_strength))
 
             rsi_dic[self.inputSymbols[i]] = rel_strength_index
 
@@ -254,7 +256,8 @@ class metrics():
     def __init__(self, statistics):
         self.statistics = statistics
 
-    def bbands(self, num_bands=0, interval='day', span='year'):
+        
+    def bbands_bottom(self, num_bands=0, interval='day', span='year'):
         """Function that compares bollinger bands on a collection
         of stocks to their current price. Returns a dictionary
         where the keys are stock tickers and the values are
@@ -300,7 +303,7 @@ class metrics():
         return boolean_dic
 
 
-    def ma(self, short_period='month', long_period='year'):
+    def ma_crossover(self, short_period='month', long_period='year'):
         """Function that does an assessment based on long-term
         vs short-term moving averages. Returns a dictionary where
         the keys are stock tickers and the values are 1 if the
@@ -333,5 +336,58 @@ class metrics():
                 boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 1.0
             else:
                 boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 0.0
+
+        return boolean_dic
+
+
+    def rsi_crossover(self, rsi_cutoff=30, strategy='below'):
+        """Function that does an assessment based on relative
+        strength index. Returns a dictionary where the keys are
+        stock tickers and the values are 1 if the rsi value of 
+        a stock is either above or below (based on value of
+        strategy provided to the function) rsi_cutoff and a zero
+        if not.
+
+        Parameters
+        rsi_cutoff - Give a cutoff value for the relative strength
+            index. This should be a real number between 0 and 100.
+        strategy - Give a string that is either 'below' or 'above'.
+            This tells the function to generate a buy signal when
+            the stock goes either above or below the rsi_cutoff.
+
+        Returns
+        A dictionary where the keys are stock tickers and the values
+        are either 1 or 0 based on if the stock is above or below 
+        (based on value of strategy given to the function) the
+        rsi_cutoff value.
+        """
+
+        rsi_dic = self.statistics.rsi(span='month', sigma=7)
+
+        boolean_dic = {}
+        
+        '''loop over the stocks in inputSymbols'''
+        for i in np.arange(len(self.statistics.inputSymbols)):
+            '''if strategy is below, then return a buy signal if
+            the rsi is below rsi_cutoff'''
+            if strategy == 'below':
+                if float(rsi_dic['{}'.format(self.statistics.inputSymbols[i])]) < rsi_cutoff:
+                    boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 1.0
+                else:
+                    boolean_dic['{}'.format(self.statistics.inputSymbols[i])] =	0.0
+
+                    '''if strategy is above, then return a buy signal
+                    if the rsi is above rsi_cutoff'''
+            elif strategy == 'above':
+                if float(rsi_dic['{}'.format(self.statistics.inputSymbols[i])]) < rsi_cutoff:
+                    boolean_dic['{}'.format(self.statistics.inputSymbols[i])] =	0.0
+                else:
+                    boolean_dic['{}'.format(self.statistics.inputSymbols[i])] =	1.0
+
+                    '''if strategy is neither above nor below, throw a
+                    ValueError'''
+            else:
+                raise ValueError('strategy must be either above or below. Your strategy was {}'.format(strategy))
+
 
         return boolean_dic
