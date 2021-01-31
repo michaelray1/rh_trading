@@ -1,21 +1,40 @@
 import robin_stocks as rh
+import tensorflow as tf
 import numpy as np
+
 
 class statistics():
     """Class that calculates different statistics for stocks.
     Takes in inputSymbols which is a list of strings with
     the stock tickers as elements"""
 
-    def __init__(self, un, pw, inputSymbols):
-        """Initialization function for the metrics object. Just
-        pass in the username (email) and password associated
-        with the robin hood account you wish to use. Also give
-        a list of strings for inputSymbols. Each string should
-        be a stock ticker."""
-        self.un = un
-        self.pw = pw
-        self.inputSymbols = inputSymbols
+    def __init__(self):
+        """Initialization function for the statistics object."""
+        pass
 
+
+    def sd_to_is(self, stock_data):
+        """Converts stock data in the form that the robin stocks
+        function get_stock_historicals gives it to you to 
+        just a list of the stock tickers associated with that data.
+
+        Parameters
+        stock_data - Give stock data just as it is given from the
+            robin_stocks function get_stock_historicals
+
+        Returns
+        A list of strings that are all the stock tickers present
+        in the stock_data
+        """
+        inputSymbols = []
+        for i in np.arange(len(stock_data)):
+            if stock_data[i]['symbol'] in inputSymbols:
+                pass
+            else:
+                inputSymbols.append(stock_data[i]['symbol'])
+
+        return inputSymbols
+        
         
     def dictionary_data(self, stock_data, data_point):
         """Function that takes in stock data in the form that
@@ -41,34 +60,30 @@ class statistics():
         '''Set up dictionary for the given data point and then
         populate it with the wanted data. Data will go in order
         from past to present ending with the previous day's data.'''
-        num_points = int(len(stock_data)/len(self.inputSymbols))
+        inputSymbols = self.sd_to_is(stock_data)
+        num_points = int(len(stock_data)/len(inputSymbols))
         dp_dic = {}
         j=0
-        for i in np.arange(len(self.inputSymbols)):
+        for i in np.arange(len(inputSymbols)):
             data = []
             k=0
             while k < num_points:
                 data.append(float(stock_data[j]['{}'.format(data_point)]))
                 j+=1
                 k+=1
-            dp_dic['{}'.format(self.inputSymbols[i])] = data
+            dp_dic['{}'.format(inputSymbols[i])] = data
 
         '''Return dp_dic'''
         return dp_dic
         
         
-    def bollinger_bands(self, interval='day', span='year'):
+    def bollinger_bands(self, stock_data):
         """Function that calculates bollinger bands for a given
         list of stocks
 
         Parameters
-            interval - Give the length of time you want the
-                bollinger bands to be calculated over. Default
-                is one day
-            span - Give the span of time which the averages and 
-                standard deviations should be calculated over.
-                Default is one year. Options are week, month,
-                3month, year, or 5year
+            stock_data - Give a dictionary of the same form that
+                you would get from the function get_stock_historicals
 
         Returns
             A dictionary with the symbols matched with its
@@ -76,21 +91,17 @@ class statistics():
             (mean - 2 standard dev., mean - st dv, ..., mean + 2 st dv)
         """
 
-        '''login to robin hood and get stock data for given stocks, 
-        interval, and span'''
-        rh.login(self.un, self.pw)
-        stock_data = rh.stocks.get_stock_historicals(inputSymbols=self.inputSymbols, interval=interval, span=span)
-
         '''use the dictionary_data function above to put the data
         into a dictionary so it's easier to use'''
         close_dic = self.dictionary_data(stock_data=stock_data, data_point='close_price')
+        inputSymbols = self.sd_to_is(stock_data=stock_data)
 
         '''calculate the bollinger bands. Five numbers for each
         entry represent the mean and then one and two standard
         deviations either up or down from the mean'''
         bb_dic = {}
-        for i in np.arange(len(self.inputSymbols)):
-            prices = close_dic['{}'.format(self.inputSymbols[i])]
+        for i in np.arange(len(inputSymbols)):
+            prices = close_dic['{}'.format(inputSymbols[i])]
             mean = np.mean(prices)
             std = np.std(prices)
             oneup = mean + std
@@ -98,43 +109,38 @@ class statistics():
             twoup = mean + 2*std
             twodown = mean - 2*std
             bbands = [twodown, onedown, mean, oneup, twoup]
-            bb_dic['{}'.format(self.inputSymbols[i])] = np.array(bbands)
+            bb_dic['{}'.format(inputSymbols[i])] = np.array(bbands)
 
         '''return the bollinger bands dictionary'''
         return bb_dic
 
 
-    def moving_average(self, span='year'):
+    def moving_average(self, stock_data):
         """Function that computes a moving average of stock prices
         (daily closing price) over a given time period.
 
         Parameters
-            span - Give the length of time over which the moving
-                average should be calculated. Either give
-                day, week, month, 3month, year, or 5year
+            stock_data - Give a dictionary of the same form that
+                you would get from the function get_stock_historicals
 
         Returns
         A dictionary where the keys are stock tickers and the values
         are the moving average of each stock over the span given.
         """
-        
-        '''login to robin hood and get stock data for given stocks,
-        interval, and span'''
-        rh.login(self.un, self.pw)
-        stock_data = rh.stocks.get_stock_historicals(inputSymbols=self.inputSymbols, interval='day', span=span)
 
         '''Take the data and put it into a dictionary so it's easy
-        to use. Use the dictionary_data function to do this. Also use'''
+        to use. Use the dictionary_data function to do this.'''
         close_dic = self.dictionary_data(stock_data, data_point='close_price')
+        inputSymbols = self.sd_to_is(stock_data=stock_data)
 
         '''For each stock, get the close data and then take the average.
         The span of the average is decide when we pull the data from
         robin hood to get stock_data'''
         mean_dic = {}
-        for i in np.arange(len(self.inputSymbols)):
-            data = close_dic['{}'.format(self.inputSymbols[i])]
+        for i in np.arange(len(inputSymbols)):
+            data = close_dic['{}'.format(inputSymbols[i])]
             mean = np.mean(data)
-            mean_dic['{}'.format(self.inputSymbols[i])] = mean
+            mean_dic['{}'.format(inputSymbols[i])] = mean
 
         '''return dictionary containing moving averages'''
         return mean_dic
@@ -169,15 +175,14 @@ class statistics():
         return mean
             
     
-    def rsi(self, span='month', sigma=7):
+    def rsi(self, stock_data, sigma=7):
         """Function that calculates the relative strength index for
         the inputSymbols associated with the statistics object. This
         calculates the moving average for the rsi calculation over
         
         Parameters
-            span - Give the length of time over which the moving
-                average for getting the rsi should be calculated. 
-                Either give day, week, month, 3month, year, or 5year
+            stock_data - Give a dictionary of the same form that
+                you would get from the function get_stock_historicals
             sigma - Give an integer that is the sigma you want
                 when constructing the gaussian function which
                 smooths the stock data
@@ -187,38 +192,35 @@ class statistics():
         values are the relative strength index of the stock
         """
 
-        '''login and get stock data'''
-        rh.login(self.un, self.pw)
-        stock_data = rh.get_stock_historicals(inputSymbols=self.inputSymbols, interval='day', span=span)
-
         '''Take the data and put it into a dictionary so it's easy
         to use. Use the dictionary_data function to do this.'''
         close_dic = self.dictionary_data(stock_data=stock_data, data_point='close_price')
+        inputSymbols = self.sd_to_is(stock_data=stock_data)
 
         '''Create a dictionary for rsi values. This will be filled
         in the loop below and returned at the end of the function.'''
         rsi_dic = {}
 
         '''loop over inputSymbols (stocks)'''
-        for i in np.arange(len(self.inputSymbols)):
+        for i in np.arange(len(inputSymbols)):
             
             '''initialize up and down arrays for rsi calculation'''
             up_array = []
             down_array = []
 
             '''loop over the length of the stock data'''
-            for j in np.arange(len(close_dic[self.inputSymbols[i]])):
+            for j in np.arange(len(close_dic[inputSymbols[i]])):
 
                 '''append the difference in price to up array if the 
                 price went up. append to down array if it went down.
                 if the price stayed the same, append a zero to both.
                 '''
-                if close_dic[self.inputSymbols[i]][j] > close_dic[self.inputSymbols[i]][j-1]:
-                    up_array.append(np.abs(close_dic[self.inputSymbols[i]][j] - close_dic[self.inputSymbols[i]][j-1]))
+                if close_dic[inputSymbols[i]][j] > close_dic[inputSymbols[i]][j-1]:
+                    up_array.append(np.abs(close_dic[inputSymbols[i]][j] - close_dic[inputSymbols[i]][j-1]))
                     down_array.append(0)
-                elif close_dic[self.inputSymbols[i]][j] < close_dic[self.inputSymbols[i]][j-1]:
+                elif close_dic[inputSymbols[i]][j] < close_dic[inputSymbols[i]][j-1]:
                     up_array.append(0)
-                    down_array.append(np.abs(close_dic[self.inputSymbols[i]][j] - close_dic[self.inputSymbols[i]][j-1]))
+                    down_array.append(np.abs(close_dic[inputSymbols[i]][j] - close_dic[inputSymbols[i]][j-1]))
                 else:
                     up_array.append(0)
                     down_array.append(0)
@@ -236,7 +238,7 @@ class statistics():
             rel_strength = up_exp_avg/down_exp_avg
             rel_strength_index = 100 - (100/(1 + rel_strength))
 
-            rsi_dic[self.inputSymbols[i]] = rel_strength_index
+            rsi_dic[inputSymbols[i]] = rel_strength_index
 
         return rsi_dic
 
@@ -257,28 +259,25 @@ class metrics():
         self.statistics = statistics
 
         
-    def bbands_bottom(self, num_bands=0, interval='day', span='year'):
+    def bbands_bottom(self, stock_data, num_bands=1):
         """Function that compares bollinger bands on a collection
         of stocks to their current price. Returns a dictionary
         where the keys are stock tickers and the values are
         1 if we should buy based on bollinger band assessment,
         or zero if we shouldn't buy based on bollinger band
-        assessment.
+        assessment. This assessment is made based on whatever
+        the last price in stock_data is. This provides functionality
+        for backtesting.
 
         Parameters
+        stock_data - Give a dictionary of the same form that       
+            you would get from the function get_stock_historicals
         num_bands -  must be an integer between 0 and 4. 
             0 means a buy flag is produced only if the stock 
             is below 2 standard deviations lower than its mean. 
             4 means a buy flag is produced only if the stock 
             is below 2 standard deviations above its mean.
             Default value is 0.
-        interval - Give the length of time you want the
-            bollinger bands to be calculated over. Default
-            is one day
-        span - Give the span of time which the averages and                                                    
-            standard deviations should be calculated over as a string.
-            Default is one year. Options are week, month
-            3month, year, or 5year
 
         Returns
         A dictionary where the keys are the inputSymbols
@@ -288,22 +287,23 @@ class metrics():
         is no buy flag for that stock.
         """
 
-        bollinger = self.statistics.bollinger_bands()
+        bollinger = self.statistics.bollinger_bands(stock_data=stock_data)
+        inputSymbols = self.statistics.sd_to_is(stock_data=stock_data)
 
         '''Evaluate whether the stocks are currently within
         num_bands of the bottom band.'''
-        current_prices = rh.stocks.get_latest_price(inputSymbols=self.statistics.inputSymbols)
+        last_price = stock_data[-1]['close_price']
         boolean_dic = {}
-        for i in np.arange(len(self.statistics.inputSymbols)):
-            if float(current_prices[i]) <= bollinger[self.statistics.inputSymbols[i]][num_bands]:
-                boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 1.0
+        for i in np.arange(len(inputSymbols)):
+            if float(last_prices[i]) <= bollinger[inputSymbols[i]][num_bands]:
+                boolean_dic['{}'.format(inputSymbols[i])] = 1.0
             else:
-                boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 0.0
+                boolean_dic['{}'.format(inputSymbols[i])] = 0.0
 
         return boolean_dic
 
 
-    def ma_crossover(self, short_period='month', long_period='year'):
+    def ma_crossover(self, stock_data, short_period=25, long_period=250):
         """Function that does an assessment based on long-term
         vs short-term moving averages. Returns a dictionary where
         the keys are stock tickers and the values are 1 if the
@@ -311,14 +311,12 @@ class metrics():
         moving average.
 
         Parameters
-        short_period - Give a string which represents the short
-            time period moving average you want to calculate.
-            Options for the string are day, week, month, 3month,
-            year, or 5year
-        long_period - Give a string which represents the long
-            time period moving average you want to calculate.
-            Options for the string are day, week, month, 3month,
-            year, or 5year
+        stock_data - Give a dictionary of the same form that
+            you would get from the function get_stock_historicals
+        short_period - Give an integer which represents the short
+            time period moving average you want to calculate in days.
+        long_period - Give an integer which represents the long
+            time period moving average you want to calculate in days
 
         Returns
         A dictionary where the keys are the stock tickers associated
@@ -326,21 +324,25 @@ class metrics():
         buy or 0 if we shouldn't. We buy when the short_period 
         moving average is above the long_period moving average.
         """
+        inputSymbols = self.statistics.sd_to_is(stock_data=stock_data)
 
-        short_dic = self.statistics.moving_average(span=short_period)
-        long_dic = self.statistics.moving_average(span=long_period)
+        stock_data_short = stock_data[len(stock_data)-short_period : -1]
+        stock_data_long = stock_data[len(stock_data)-long_period : -1]
+        
+        short_dic = self.statistics.moving_average(stock_data=stock_data_short)
+        long_dic = self.statistics.moving_average(stock_data=stock_data_long)
 
         boolean_dic = {}
-        for i in np.arange(len(self.statistics.inputSymbols)):
-            if short_dic['{}'.format(self.statistics.inputSymbols[i])] > long_dic['{}'.format(self.statistics.inputSymbols[i])]:
-                boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 1.0
+        for i in np.arange(len(inputSymbols)):
+            if short_dic['{}'.format(inputSymbols[i])] > long_dic['{}'.format(inputSymbols[i])]:
+                boolean_dic['{}'.format(inputSymbols[i])] = 1.0
             else:
-                boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 0.0
+                boolean_dic['{}'.format(inputSymbols[i])] = 0.0
 
         return boolean_dic
 
 
-    def rsi_crossover(self, rsi_cutoff=30, strategy='below'):
+    def rsi_crossover(self, stock_data, rsi_cutoff=30, strategy='below'):
         """Function that does an assessment based on relative
         strength index. Returns a dictionary where the keys are
         stock tickers and the values are 1 if the rsi value of 
@@ -349,6 +351,8 @@ class metrics():
         if not.
 
         Parameters
+        stock_data - Give a dictionary of the same form that
+            you would get from the function get_stock_historicals
         rsi_cutoff - Give a cutoff value for the relative strength
             index. This should be a real number between 0 and 100.
         strategy - Give a string that is either 'below' or 'above'.
@@ -362,27 +366,28 @@ class metrics():
         rsi_cutoff value.
         """
 
-        rsi_dic = self.statistics.rsi(span='month', sigma=7)
+        rsi_dic = self.statistics.rsi(stock_data=stock_data, sigma=7)
+        inputSymbols = self.statistics.sd_to_is(stock_data=stock_data)
 
         boolean_dic = {}
         
         '''loop over the stocks in inputSymbols'''
-        for i in np.arange(len(self.statistics.inputSymbols)):
+        for i in np.arange(len(inputSymbols)):
             '''if strategy is below, then return a buy signal if
             the rsi is below rsi_cutoff'''
             if strategy == 'below':
-                if float(rsi_dic['{}'.format(self.statistics.inputSymbols[i])]) < rsi_cutoff:
-                    boolean_dic['{}'.format(self.statistics.inputSymbols[i])] = 1.0
+                if float(rsi_dic['{}'.format(inputSymbols[i])]) < rsi_cutoff:
+                    boolean_dic['{}'.format(inputSymbols[i])] = 1.0
                 else:
-                    boolean_dic['{}'.format(self.statistics.inputSymbols[i])] =	0.0
+                    boolean_dic['{}'.format(inputSymbols[i])] =	0.0
 
                     '''if strategy is above, then return a buy signal
                     if the rsi is above rsi_cutoff'''
             elif strategy == 'above':
-                if float(rsi_dic['{}'.format(self.statistics.inputSymbols[i])]) < rsi_cutoff:
-                    boolean_dic['{}'.format(self.statistics.inputSymbols[i])] =	0.0
+                if float(rsi_dic['{}'.format(inputSymbols[i])]) < rsi_cutoff:
+                    boolean_dic['{}'.format(inputSymbols[i])] =	0.0
                 else:
-                    boolean_dic['{}'.format(self.statistics.inputSymbols[i])] =	1.0
+                    boolean_dic['{}'.format(inputSymbols[i])] =	1.0
 
                     '''if strategy is neither above nor below, throw a
                     ValueError'''
@@ -391,3 +396,296 @@ class metrics():
 
 
         return boolean_dic
+
+
+
+
+
+
+class nn():
+    """Class for the neural network object. This class contains functions
+    to create the neural network, prepare training and testing data sets,
+    and run the neural network on new data. This class requires both the
+    metrics and statistics classes so that it can perform calculations and
+    get metrics. It also needs a username and password for a robinhood
+    account.
+    """
+
+    def __init__(self, metrics, statistics, un, pw):
+        self.metrics = metrics
+        self.statistics = statistics
+        self.un = un
+        self.pw = pw
+
+    
+    def get_tt_data(self, inputSymbols, num_bands=1, interval='day', span='year', ma_short=25, ma_long=200, rsi_cutoff=30, rsi_strategy='below', days_before=10, percent_gained=4.0, percent_training=80):
+        """Function that creates testing and training data sets and
+        then saves them to self.x_train, self.y_train,
+        self.x_test, self.y_test.
+
+        Parameters
+        inputSymbols - Give a list of stock tickers that should be used
+            to create training and testing data. This should be a long
+            list (at least 500 to 1000) to get a good neural network going.
+        num_bands - Give an integer between 0 and 4 that will be used
+            as the cutoff for bbands_bottom
+        interval - Give the length of time you want the
+            bollinger bands to be calculated over. Default 
+            is one day
+        span - Give the span of time which the averages and
+            standard deviations should be calculated over.
+            Default is one year. Options are week, month,
+            3month, year, or 5year
+        ma_short - Give an integer which represents the short
+            time period moving average you want to calculate for
+            ma_crossover metric in days.
+        ma_long - Give an integer which represents the long
+            time period moving average you want to calculate for
+            ma_crossover metric in days.
+        rsi_cutoff - Give a cutoff value for the relative strength
+            index. This should be a real number between 0 and 100.
+        rsi_strategy - Give a string that is either 'below' or 'above'.
+            This tells the function to generate a buy signal when
+            the stock goes either above or below the rsi_cutoff.
+        days_before - Give an integer between 1 and the number of
+            days that you are collecting data for each stock (controlled
+            by the parameter span). This parameter tells the algorithm
+            when to evaluate whether the buy signal was correctly
+            or incorrectly signalled. If days_before=10,
+            for example, then that means the algorithm will calculate
+            the metrics and then make a prediction (once we train it)
+            which will then be compared to the expected (or wanted)
+            value which is just a yes or no based on whether
+            the stock went up by percent_gained at any point within
+            days_before of the data ending. Default for days_before
+            is 10.
+        percent_gained - Give a float greater than zero which represents
+            the percentage gained on a stock before we give the sell
+            signal. Default is 4.0
+        percent_training - Give a float between 0 and 100 that represents
+            the percent of the data you want to be used for training
+
+        Returns
+        tt_data
+        returns a numpy array of size len(inputSymbols) by 2 that
+        represents input and output data to be used for training
+        and/or testing.
+        """
+
+        '''Login to robinhood account to access stock information'''
+        rh.login(self.un, self.pw)
+
+        '''Calculate metrics for all of the inputSymbols and organize
+        them in a list of zeros and ones where 0's indicate the output
+        of each metric test'''
+        tt_data = np.zeros([len(inputSymbols), 2])
+
+        '''loop over the stocks we're taking data from (probably
+        the S&P500 or something like that)'''
+        flag = False
+        for i in np.arange(len(inputSymbols)):
+
+            '''get stock data and calculate all the relevant metrics'''
+            stock_data = rh.get_stock_historicals(inputSymbols=inputSymbols[i], interval=interval, span=span)
+            bbands_bottom = self.metrics.bbands_bottom(stock_data=stock_data[:-days_before], num_bands=1)
+            ma_crossover = self.metrics.ma_crossover(stock_data=stock_data[:-days_before], short_period=ma_short, long_period=ma_long)
+            rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, rsi_strategy=rsi_strategy)
+
+            '''Append to the tt_data a numpy array which looks like
+            (bbands_bottom, ma_crossover, rsi_cutoff) where each of these
+            is just a one or zero'''
+            tt_data[i,0] = np.array([bbands_bottom[inputSymbols[i]], ma_crossover[inputSymbols[i]], rsi_crossover[inputSymbols[i]]])
+
+            '''loop over days between today and the last data taken for
+            calculating the metrics. Then check if the stock has risen
+            percent_gained above where it was when metrics were calculated.
+            Then append to tt_data as necessary.'''
+            for j in np.arange(days_before):
+
+                if stock_data[-1-j]['high_price'] > stock_data[-1-days_before]['close_price'] + stock_data[-1-days_before]['close_price'] * (percent_gained/100):
+                    tt_data[i,1] = 1.0
+                    flag = True
+                else:
+                    pass
+
+            '''if we get all the way through the loop and flag is still
+            false, then that means the stock never rose percent_gained
+            above where it was when metrics were calculated. So we add a
+            zero to output_dict.'''
+            if flag==False:
+                tt_data[i,1] = 0.0
+            else:
+                pass
+
+            flag = False
+
+        '''Set self.x_train, self.y_train, self.x_test, and self.y_test
+        to their appropriate values. Take the first percent_training percent
+        of the data to use for training and the rest for testing.'''
+        self.training = tt_data[:int(len(inputSymbols)*(percent_training/100)), :]
+        self.testing = tt_data[int(len(inputSymbols)*(percent_training/100)):, :]
+
+            
+        '''return the tt_data. tt_data is an array of size len(inputSymbols)
+        by 2. This is a list of training/testing data where the first
+        entry in each row is the input data and the second entry in each
+        column is the output (expected outcome) data.'''
+        return tt_data
+
+
+    def shuffle_data(self, data):
+        """Function to shuffle data. The purpose of this function is to 
+        shuffle training and testing data when it is fed into the network.
+        The data will be shuffled along the first axis (the 0th axis in 
+        python indexing).
+
+        Parameters:
+        data - Give a numpy array of any size. This is the data to be
+            shuffled
+
+        Returns
+        A numpy array of the same shape as the input data but with the 
+        data shuffled along the first axis.
+        """
+
+        np.random.shuffle(data)
+
+        return data
+
+
+    def build_network(self, hidden_layers=np.array([32]), optimizer='adam', loss='meansquarederror'):
+        """Builds neural network with number of hidden layers equal to the
+        length of hidden_layers. Uses the length of one piece of training
+        data in order to determine the shape of the input layer. Because
+        of this, only run this function after running get_tt_data
+
+        Parameters
+        hidden_layers - Give a 1-D numpy array whose length is the number
+            of hidden layers you want and whose values are the output
+            size of each layer. Default is one hidden layer with output
+            size 32
+        optimizer - Give a string that is the tensorflow name of the 
+            optimizer you want to use
+        loss - Give a string that is the tensorflow name of the loss
+            function you want to use
+
+        Returns
+        Nothing. This does, however, set self.model equal to the tensorflow
+        model created by this function.
+        """
+
+        '''Set up the neural network architecture.Here we use a ReLU
+        activation function on the last layer.'''
+        n_metrics = int(len(self.training[0,0]))
+        
+        model = tf.keras.models.Sequential()
+        #Add input layer
+        model.add(tf.keras.Input(shape=(n_metrics,)))
+        #Add hidden layers with number of neurons corresponding
+        #to each value in hidden_layers
+        for i in np.arange(len(hidden_layers)):
+            model.add(tf.keras.layers.Dense(hidden_layers[i]))
+        #Add output layer that just gives one number
+        model.add(tf.keras.layers.Dense(1))
+        #Add relu layer where relu function is applied to the output of the previous layer
+        #Set relu threshold to 0.5 (this could change later)
+        model.add(tf.keras.layers.ReLU())
+
+        #compile the neural network with its activation & loss functions
+        model.compile(optimizer=optimizer, loss=loss)
+
+        self.model = model
+
+
+    def train_network(self, batch_size=16, epochs=10):
+        """Function that takes the model built by build_network
+        and trains it using the training data built by get_tt_data.
+        This function requires that it knows the training data as
+        well as the network architecture. Therefore, it should be
+        run only after both the functions get_tt_data and build_network
+        have been run. This function also runs the model on the testing
+        data to see how well it works on that.
+
+        Parameters
+        batch_size - Give an integer that is the size of your batches
+            when training the model
+        epochs - Give an integer that is the number of epochs you want
+            to train your model with
+
+        Returns
+        The output of the model.fit function. This is a History
+        object. The History.history attribute is a record of
+        training loss values and metric values at successive
+        epochs
+        """
+
+        #Shuffle training data
+        shuffled_training = self.shuffle_data(data=self.training)
+        x_train = shuffled_training[:,0]
+        y_train = shuffled_training[:,1]
+
+        #Shuffle testing data
+        shuffled_testing = self.shuffle_data(data=self.testing)
+        x_test = shuffled_testing[:,0]
+        y_test = shuffled_testing[:,1]
+        validation_data = (x_test, y_test)
+        
+        #Fit the model using training and testing data
+        History = self.model.fit(x=x_train, y=y_train, batch_size=batch_size, epochs=epochs, validation_data=validation_data)
+
+        return History
+
+
+    def predict(self, stock, interval='day', span='year', num_bands=1, ma_short=25, ma_long=200, rsi_cutoff=30, rsi_strategy='below'):
+        """Function that makes a buy/not buy signal prediction for
+        the stock based on the model. This can only be run after
+        get_tt_data, build_network, and train_network have been run. 
+        The function first calculates all the metrics in the self.metrics 
+        class. Then it puts the vector of 1's and 0's representing the 
+        result of these metrics through the neural network.
+
+        Parameters
+        stock - Give a string that is the stock ticker which
+            you want to make a prediction for.
+        interval - Give the length of time you want the
+            metrics  to be calculated over. Default
+            is one day
+        span - Give the span of time which the averages and
+            standard deviations should be calculated over.
+            Default is one year. Options are week, month,
+            3month, year, or 5year
+        ma_short - Give an integer which represents the short
+            time period moving average you want to calculate for
+            ma_crossover metric in days. This must be shorter (in days)
+            than whatever span is.
+        ma_long - Give an integer which represents the long
+            time period moving average you want to calculate for
+            ma_crossover metric in days. This must be shorter (in days)
+            than whatever span is so that we have access to data
+            far enough back to calculate the moving average
+        rsi_cutoff - Give a cutoff value for the relative strength
+            index. This should be a real number between 0 and 100.
+        rsi_strategy - Give a string that is either 'below' or 'above'.
+            This tells the function to generate a buy signal when
+            the stock goes either above or below the rsi_cutoff.
+
+        Returns
+        The output of model.predict(). This is just a float
+        between 0 and 1 with 1 corresponding to a buy signal
+        and 0 corresponding to a not buy signal.
+        """
+
+        #login and get data for stock
+        rh.login(self.un, self.pw)
+        stock_data = rh.get_stock_historicals(inputSymbols=stock, interval=interval, span=span)
+
+        #Calculate metrics
+        bbands_bottom = self.metrics.bbands_bottom(stock_data=stock_data[:-days_before], num_bands=1)
+        ma_crossover = self.metrics.ma_crossover(stock_data=stock_data[:-days_before], short_period=ma_short, long_period=ma_long)
+        rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, rsi_strategy=rsi_strategy)
+
+        input_data = np.array([bbands_bottom[stock], ma_crossover[stock], rsi_crossover[stock]])
+        
+        prediction = self.model.predict(input_data)
+
+        return prediction
