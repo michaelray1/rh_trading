@@ -290,12 +290,19 @@ class metrics():
         bollinger = self.statistics.bollinger_bands(stock_data=stock_data)
         inputSymbols = self.statistics.sd_to_is(stock_data=stock_data)
 
+        '''Split the data into separate data sets for each stock, 
+        then populate a dictionary full of the latest prices on each
+        stock within the data set.'''
+        closing_prices = self.statistics.dictionary_data(stock_data=stock_data, data_point='close_price')
+        last_prices = {}
+        for i in np.arange(len(inputSymbols)):
+            last_prices['{}'.format(inputSymbols[i])] = closing_prices['{}'.format(inputSymbols[i])][-1]
+        
         '''Evaluate whether the stocks are currently within
         num_bands of the bottom band.'''
-        last_price = stock_data[-1]['close_price']
         boolean_dic = {}
         for i in np.arange(len(inputSymbols)):
-            if float(last_prices[i]) <= bollinger[inputSymbols[i]][num_bands]:
+            if float(last_prices['{}'.format(inputSymbols[i])]) <= bollinger['{}'.format(inputSymbols[i])][num_bands]:
                 boolean_dic['{}'.format(inputSymbols[i])] = 1.0
             else:
                 boolean_dic['{}'.format(inputSymbols[i])] = 0.0
@@ -466,10 +473,8 @@ class nn():
             the percent of the data you want to be used for training
 
         Returns
-        tt_data
-        returns a numpy array of size len(inputSymbols) by 2 that
-        represents input and output data to be used for training
-        and/or testing.
+        Nothing. Just assigns values to self.testing and self.training
+        appropriately
         """
 
         '''Login to robinhood account to access stock information'''
@@ -478,23 +483,24 @@ class nn():
         '''Calculate metrics for all of the inputSymbols and organize
         them in a list of zeros and ones where 0's indicate the output
         of each metric test'''
-        tt_data = np.zeros([len(inputSymbols), 2])
+        num_metrics = 3
+        tt_data = np.zeros([len(inputSymbols), num_metrics+1])
 
         '''loop over the stocks we're taking data from (probably
         the S&P500 or something like that)'''
         flag = False
         for i in np.arange(len(inputSymbols)):
-
+            
             '''get stock data and calculate all the relevant metrics'''
-            stock_data = rh.get_stock_historicals(inputSymbols=inputSymbols[i], interval=interval, span=span)
+            stock_data = rh.get_stock_historicals(inputSymbols=str(inputSymbols[i]), interval=interval, span=span)
             bbands_bottom = self.metrics.bbands_bottom(stock_data=stock_data[:-days_before], num_bands=1)
             ma_crossover = self.metrics.ma_crossover(stock_data=stock_data[:-days_before], short_period=ma_short, long_period=ma_long)
-            rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, rsi_strategy=rsi_strategy)
+            rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, strategy=rsi_strategy)
 
             '''Append to the tt_data a numpy array which looks like
             (bbands_bottom, ma_crossover, rsi_cutoff) where each of these
             is just a one or zero'''
-            tt_data[i,0] = np.array([bbands_bottom[inputSymbols[i]], ma_crossover[inputSymbols[i]], rsi_crossover[inputSymbols[i]]])
+            tt_data[i,:-1] = np.array([bbands_bottom[inputSymbols[i]], ma_crossover[inputSymbols[i]], rsi_crossover[inputSymbols[i]]])
 
             '''loop over days between today and the last data taken for
             calculating the metrics. Then check if the stock has risen
@@ -502,8 +508,8 @@ class nn():
             Then append to tt_data as necessary.'''
             for j in np.arange(days_before):
 
-                if stock_data[-1-j]['high_price'] > stock_data[-1-days_before]['close_price'] + stock_data[-1-days_before]['close_price'] * (percent_gained/100):
-                    tt_data[i,1] = 1.0
+                if float(stock_data[-1-j]['high_price']) > float(stock_data[-1-days_before]['close_price']) + float(stock_data[-1-days_before]['close_price']) * (percent_gained/100):
+                    tt_data[i,-1] = 1.0
                     flag = True
                 else:
                     pass
@@ -513,24 +519,23 @@ class nn():
             above where it was when metrics were calculated. So we add a
             zero to output_dict.'''
             if flag==False:
-                tt_data[i,1] = 0.0
+                tt_data[i,-1] = 0.0
             else:
                 pass
 
             flag = False
 
+            '''print progress message'''
+            print('completed collecting data for {} ({} of {} stocks done)'.format(inputSymbols[i],i+1,len(inputSymbols)))
+
         '''Set self.x_train, self.y_train, self.x_test, and self.y_test
         to their appropriate values. Take the first percent_training percent
-        of the data to use for training and the rest for testing.'''
+        of the data to use for training and the rest for testing. Also save
+        stock tickers for use in other functions'''
         self.training = tt_data[:int(len(inputSymbols)*(percent_training/100)), :]
         self.testing = tt_data[int(len(inputSymbols)*(percent_training/100)):, :]
-
-            
-        '''return the tt_data. tt_data is an array of size len(inputSymbols)
-        by 2. This is a list of training/testing data where the first
-        entry in each row is the input data and the second entry in each
-        column is the output (expected outcome) data.'''
-        return tt_data
+        self.test_tickers = inputSymbols[int(len(inputSymbols)*(percent_training/100)):]
+        self.train_tickers = inputSymbols[:int(len(inputSymbols)*(percent_training/100))]
 
 
     def shuffle_data(self, data):
@@ -553,7 +558,7 @@ class nn():
         return data
 
 
-    def build_network(self, hidden_layers=np.array([32]), optimizer='adam', loss='meansquarederror'):
+    def build_network(self, hidden_layers=np.array([32, 16, 8]), optimizer=tf.keras.optimizers.Adam(), loss=tf.keras.losses.MeanSquaredError()):
         """Builds neural network with number of hidden layers equal to the
         length of hidden_layers. Uses the length of one piece of training
         data in order to determine the shape of the input layer. Because
@@ -565,9 +570,11 @@ class nn():
             size of each layer. Default is one hidden layer with output
             size 32
         optimizer - Give a string that is the tensorflow name of the 
-            optimizer you want to use
+            optimizer you want to use. You can also pass an instance
+            of tf.keras.optimizers.Optimizer
         loss - Give a string that is the tensorflow name of the loss
-            function you want to use
+            function you want to use. You can also pass an instance
+            of tf.keras.losses.Loss
 
         Returns
         Nothing. This does, however, set self.model equal to the tensorflow
@@ -576,28 +583,26 @@ class nn():
 
         '''Set up the neural network architecture.Here we use a ReLU
         activation function on the last layer.'''
-        n_metrics = int(len(self.training[0,0]))
+        n_metrics = int(len(self.training[0,:]) - 1)
         
-        model = tf.keras.models.Sequential()
+        self.model = tf.keras.models.Sequential()
         #Add input layer
-        model.add(tf.keras.Input(shape=(n_metrics,)))
+        self.model.add(tf.keras.Input(shape=(n_metrics,)))
         #Add hidden layers with number of neurons corresponding
         #to each value in hidden_layers
         for i in np.arange(len(hidden_layers)):
-            model.add(tf.keras.layers.Dense(hidden_layers[i]))
+            self.model.add(tf.keras.layers.Dense(hidden_layers[i]))
         #Add output layer that just gives one number
-        model.add(tf.keras.layers.Dense(1))
+        self.model.add(tf.keras.layers.Dense(1))
         #Add relu layer where relu function is applied to the output of the previous layer
         #Set relu threshold to 0.5 (this could change later)
-        model.add(tf.keras.layers.ReLU())
+        self.model.add(tf.keras.layers.ReLU())
 
         #compile the neural network with its activation & loss functions
-        model.compile(optimizer=optimizer, loss=loss)
-
-        self.model = model
+        self.model.compile(optimizer=optimizer, loss=loss)
 
 
-    def train_network(self, batch_size=16, epochs=10):
+    def train_network(self, batch_size=8, epochs=50):
         """Function that takes the model built by build_network
         and trains it using the training data built by get_tt_data.
         This function requires that it knows the training data as
@@ -621,13 +626,13 @@ class nn():
 
         #Shuffle training data
         shuffled_training = self.shuffle_data(data=self.training)
-        x_train = shuffled_training[:,0]
-        y_train = shuffled_training[:,1]
+        x_train = shuffled_training[:,:-1]
+        y_train = shuffled_training[:,-1]
 
         #Shuffle testing data
         shuffled_testing = self.shuffle_data(data=self.testing)
-        x_test = shuffled_testing[:,0]
-        y_test = shuffled_testing[:,1]
+        x_test = shuffled_testing[:,:-1]
+        y_test = shuffled_testing[:,-1]
         validation_data = (x_test, y_test)
         
         #Fit the model using training and testing data
@@ -636,7 +641,7 @@ class nn():
         return History
 
 
-    def predict(self, stock, interval='day', span='year', num_bands=1, ma_short=25, ma_long=200, rsi_cutoff=30, rsi_strategy='below'):
+    def predict(self, stock, interval='day', span='year', num_bands=1, ma_short=25, ma_long=200, rsi_cutoff=30, rsi_strategy='below', days_before=10):
         """Function that makes a buy/not buy signal prediction for
         the stock based on the model. This can only be run after
         get_tt_data, build_network, and train_network have been run. 
@@ -668,6 +673,9 @@ class nn():
         rsi_strategy - Give a string that is either 'below' or 'above'.
             This tells the function to generate a buy signal when
             the stock goes either above or below the rsi_cutoff.
+        days_before - Give an integer that is the number of days
+            that you want to allow the stock to gain money before
+            testing for an accurate prediction of the algorithm
 
         Returns
         The output of model.predict(). This is just a float
@@ -682,10 +690,102 @@ class nn():
         #Calculate metrics
         bbands_bottom = self.metrics.bbands_bottom(stock_data=stock_data[:-days_before], num_bands=1)
         ma_crossover = self.metrics.ma_crossover(stock_data=stock_data[:-days_before], short_period=ma_short, long_period=ma_long)
-        rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, rsi_strategy=rsi_strategy)
+        rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, strategy=rsi_strategy)
 
         input_data = np.array([bbands_bottom[stock], ma_crossover[stock], rsi_crossover[stock]])
         
         prediction = self.model.predict(input_data)
 
         return prediction
+
+
+    def test_accuracy(self):
+        """Tests the accuracy of the neural network using testing
+        data. Gives output in the form of percentage of stocks
+        that it correctly predicted would go up in a time period
+        given to the get_tt_data function.
+        """
+
+        correct=0
+        incorrect=0
+        for i in np.arange(len(self.test_tickers)):
+            prediction = self.predict(stock=self.test_tickers[i])
+
+            if prediction == self.testing[i,-1]:
+                correct+=1
+            else:
+                incorrect+=1
+
+        self.accuracy = '{}/{} correctly predicted'.format(correct, correct+incorrect)
+        print('{}/{} correctly predicted'.format(correct, correct+incorrect))
+
+
+
+class transactions():
+    """transactions object used in conjunction with the neural
+    network (nn) object. Includes functions for buying/selling
+    stocks and evaluating the neural network on stock data.
+    Requires a neural network to be passed to it
+    """
+
+    def __init__(self, nn): 
+        self.nn = nn
+
+        
+    def buy(self, stock, dollars):
+        """Buys fractional shared of stock in the amount
+        of dollars
+
+        Parameters
+        stock - Give a string that is the stock ticker
+            you want to purchase
+        dollars - The amount of stock you want to buy in 
+            dollars. Give a float
+        """
+        rh.login(self.nn.un, self.nn.pw)
+        stock_price = rh.get_latest_price(inputSymbols=stock)
+        stock_price = float(stock_price[0])
+        quantity = dollars/stock_price
+        rh.orders.order_buy_fractional_by_quantity(symbol=stock, quantity=quantity)
+
+
+    def sell(self, stock, percentage):
+        """Function that sells the stock specified by stock.
+        It sells percentage specified in the inputs of your
+        total holdings in the stock
+        
+        Parameters
+        stock - Give a string that is the stock ticker which
+            you want to sell
+        percentage - Give a float between 0 and 100 which indicates
+            what percentage of your holdings you want to sell in
+            this stock
+        
+        Returns
+        Nothing, just sells the stock in the percentage specified
+        """
+        portfolio = rh.account.build_holdings()
+        
+        quantity = portfolio[stock]['quantity']
+        quantity = (percentage/100) * quantity
+        rh.orders.sell_fractional_by_quantity(symbol=stock, quantity=quantity)
+        
+
+    def sell_portfolio_at_percentage(self, percent):
+        """Goes through entire portfolio and sells every stock
+        which has gained percentage specified by percent since
+        it was originally bought.
+
+        Parameters
+        percent - Give a float greater than 0. This specifies
+            the percentage at which you want to sell all your stock
+
+        Returns
+        Nothing, just goes through the portfolio and sells if the
+        stock has gained a percentage greater than percent
+        """
+        portfolio = rh.account.build_holdings()
+
+        for key in portfolio.keys():
+            if float(portfolio[key]['percentage']) > percent:
+                self.sell(stock=key, percentage=100)
