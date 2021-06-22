@@ -685,6 +685,7 @@ class nn():
 
         #login and get data for stock
         rh.login(self.un, self.pw)
+
         stock_data = rh.get_stock_historicals(inputSymbols=stock, interval=interval, span=span)
 
         #Calculate metrics
@@ -693,7 +694,6 @@ class nn():
         rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, strategy=rsi_strategy)
 
         input_data = np.array([bbands_bottom[stock], ma_crossover[stock], rsi_crossover[stock]])
-        
         prediction = self.model.predict(input_data)
 
         return prediction
