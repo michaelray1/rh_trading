@@ -1,0 +1,68 @@
+import robin_stocks as rh
+import numpy as np
+un = 'michael.ray436@gmail.com'
+pw = 'Dopesince_1996'
+
+class metrics():
+    """Class that contains functions that measure how stocks are
+    doing"""
+
+    def __init__(self):
+        pass
+
+    def bollinger_bands(self, inputSymbols, interval='day', span='year'):
+        """Function that calculates bollinger bands for a given
+        list of stocks
+
+        Parameters
+            inputSymbols - Give the list of symbols
+                to calculated bollinger bands for (might be a list
+                with just one item)
+            timelength - Give the length of time you want the
+                bollinger bands to be calculated over
+
+        Returns
+            A dictionary with the symbols matched with its
+            bollinger band values in the following form
+            (mean - 2 standard dev., mean - st dv, ..., mean + 2 st dv)
+        """
+
+        '''login to robin hood and get stock data for given stocks, 
+        interval, and span'''
+        rh.login(un, pw)
+        stock_data = rh.stocks.get_stock_historicals(inputSymbols=inputSymbols, interval='day', span=span)
+
+        '''calculate the number of entries for a given stock and set
+        up the dictionary that will be output'''
+        num_points = int(len(stock_data)/len(inputSymbols))
+        high_dic = {}
+
+        '''set up loop to extract high price data and put the data
+        into a dictionary for later use'''
+        j=0
+        for i in np.arange(len(inputSymbols)):
+            high_data = []
+            k=0
+            while k < num_points:
+                high_data.append(float(stock_data[j]['high_price']))
+                j+=1
+                k+=1
+            high_dic['{}'.format(inputSymbols[i])] = high_data
+
+        '''calculate the bollinger bands. Five numbers for each
+        entry represent the mean and then one and two standard
+        deviations either up or down from the mean'''
+        bb_dic = {}
+        for i in np.arange(len(inputSymbols)):
+            highs = high_dic['{}'.format(inputSymbols[i])]
+            mean = np.mean(highs)
+            std = np.std(highs)
+            oneup = mean + std
+            onedown = mean - std
+            twoup = mean + 2*std
+            twodown = mean - 2*std
+            bbands = [twodown, onedown, mean, oneup, twoup]
+            bb_dic['{}'.format(inputSymbols[i])] = np.array(bbands)
+
+        '''return the bollinger bands dictionary'''
+        return bb_dic
