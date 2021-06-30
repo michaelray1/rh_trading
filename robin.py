@@ -59,7 +59,7 @@ class statistics():
 
         '''Set up dictionary for the given data point and then
         populate it with the wanted data. Data will go in order
-        from past to present ending with the previous day's data.'''
+        from past to present ending with the previous days data.'''
         inputSymbols = self.sd_to_is(stock_data)
         num_points = int(len(stock_data)/len(inputSymbols))
         dp_dic = {}
@@ -693,7 +693,9 @@ class nn():
         ma_crossover = self.metrics.ma_crossover(stock_data=stock_data[:-days_before], short_period=ma_short, long_period=ma_long)
         rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, strategy=rsi_strategy)
 
-        input_data = np.array([bbands_bottom[stock], ma_crossover[stock], rsi_crossover[stock]])
+        #input_data must be passed in batches. Even though here we are
+        #only using one batch, we still have to double bracket the data
+        input_data = np.array([[bbands_bottom[stock[0]], ma_crossover[stock[0]], rsi_crossover[stock[0]]]])
         prediction = self.model.predict(input_data)
 
         return prediction
@@ -708,15 +710,21 @@ class nn():
 
         correct=0
         incorrect=0
+
         for i in np.arange(len(self.test_tickers)):
-            prediction = self.predict(stock=self.test_tickers[i])
+            print("making a prediction for ...      {}".format(self.test_tickers[i]))
+            prediction = self.predict(stock=[str(self.test_tickers[i])])
 
             if prediction == self.testing[i,-1]:
                 correct+=1
+                print("Correctly predicted!")
             else:
                 incorrect+=1
+                print("Incorrectly predicted")
 
         self.accuracy = '{}/{} correctly predicted'.format(correct, correct+incorrect)
+        print("")
+        print("")
         print('{}/{} correctly predicted'.format(correct, correct+incorrect))
 
 
