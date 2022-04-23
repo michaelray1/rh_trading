@@ -802,7 +802,6 @@ class nn():
         k=0
         l=0
         for i in np.arange(len(self.test_tickers)):
-            print("making a prediction for ...      {}".format(self.test_tickers[i]))
             prediction = self.predict(stock=[str(self.test_tickers[i])])
             if prediction==0:
                 binary_prediction=0
@@ -819,10 +818,10 @@ class nn():
                 
             if binary_prediction == self.testing[i,-1]:
                 correct+=1
-                print("Correctly predicted!")
+
             else:
                 incorrect+=1
-                print("Incorrectly predicted")
+
 
         self.accuracy = '{}/{} correctly predicted'.format(correct, correct+incorrect)
         print("")
@@ -830,7 +829,7 @@ class nn():
         print('{}/{} correctly predicted'.format(correct, correct+incorrect))
         print("")
         print("")
-        print("Of the {} stocks in the training data, {} of our predictions were correct.".format(k, l))
+        print("Of the {} stocks in the training data, {} of our predictions were correct.".format(correct+incorrect, correct))
 
 
 
