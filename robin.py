@@ -1,6 +1,8 @@
-import robin_stocks as rh
-import tensorflow as tf
 import numpy as np
+import robin_stocks.robinhood as rh
+import tensorflow as tf
+from tensorflow.keras.activations import relu
+
 
 
 class statistics():
@@ -243,6 +245,7 @@ class statistics():
         return rsi_dic
 
 
+    
 
 
 
@@ -305,7 +308,7 @@ class metrics():
             if float(last_prices['{}'.format(inputSymbols[i])]) <= bollinger['{}'.format(inputSymbols[i])][num_bands]:
                 boolean_dic['{}'.format(inputSymbols[i])] = 1.0
             else:
-                boolean_dic['{}'.format(inputSymbols[i])] = 0.0
+                boolean_dic['{}'.format(inputSymbols[i])] = -1.0
 
         return boolean_dic
 
@@ -332,10 +335,22 @@ class metrics():
         moving average is above the long_period moving average.
         """
         inputSymbols = self.statistics.sd_to_is(stock_data=stock_data)
+        points_per_stock = int(len(stock_data)/len(inputSymbols))
 
-        stock_data_short = stock_data[len(stock_data)-short_period : -1]
-        stock_data_long = stock_data[len(stock_data)-long_period : -1]
-        
+        stock_data_short = []
+        stock_data_long = []
+        for j in np.arange(len(inputSymbols)):
+            stock_data_short.append(stock_data[(j+1)*points_per_stock-short_period: (j+1)*points_per_stock])
+            stock_data_long.append(stock_data[(j+1)*points_per_stock-long_period: (j+1)*points_per_stock])
+
+        '''Reshape stock_data_long and stock_data_short so that they
+        have the same structure as if we had called rh.get_stock_historicals
+        with the time limit already enforced.'''
+        stock_data_short = np.array(stock_data_short)
+        stock_data_long = np.array(stock_data_long)
+        stock_data_short = stock_data_short[0,:]
+        stock_data_long = stock_data_long[0,:]
+
         short_dic = self.statistics.moving_average(stock_data=stock_data_short)
         long_dic = self.statistics.moving_average(stock_data=stock_data_long)
 
@@ -344,7 +359,7 @@ class metrics():
             if short_dic['{}'.format(inputSymbols[i])] > long_dic['{}'.format(inputSymbols[i])]:
                 boolean_dic['{}'.format(inputSymbols[i])] = 1.0
             else:
-                boolean_dic['{}'.format(inputSymbols[i])] = 0.0
+                boolean_dic['{}'.format(inputSymbols[i])] = -1.0
 
         return boolean_dic
 
@@ -386,13 +401,13 @@ class metrics():
                 if float(rsi_dic['{}'.format(inputSymbols[i])]) < rsi_cutoff:
                     boolean_dic['{}'.format(inputSymbols[i])] = 1.0
                 else:
-                    boolean_dic['{}'.format(inputSymbols[i])] =	0.0
+                    boolean_dic['{}'.format(inputSymbols[i])] =	-1.0
 
                     '''if strategy is above, then return a buy signal
                     if the rsi is above rsi_cutoff'''
             elif strategy == 'above':
                 if float(rsi_dic['{}'.format(inputSymbols[i])]) < rsi_cutoff:
-                    boolean_dic['{}'.format(inputSymbols[i])] =	0.0
+                    boolean_dic['{}'.format(inputSymbols[i])] =	-1.0
                 else:
                     boolean_dic['{}'.format(inputSymbols[i])] =	1.0
 
@@ -405,8 +420,77 @@ class metrics():
         return boolean_dic
 
 
+    def volume_crossover(self, stock_data, strategy='above', time=100):
+        """
+        function which takes in stock data and a strategy
+        and outputs a dictionary whose keys are stock tickers
+        and the values are (assuming strategy is above and time=100) 
+        0 if volume is below the 100 day mean and 1 if the volume
+        is above the 100 day mean.
 
+        Parameters
+        stock_data - Give a dictionary of the same form that        
+            you would get from the function get_stock_historicals
+        strategy - Give a string that is either 'above' or 'below'.
+            'above' indicates you want to send a buy signal when
+            the volume is above average, 'below' indicates the opposite
+        time - Give an integer that is the number of days you want to
+            calculate the mean volume over. Default is 100.
 
+        Returns
+        A dictionary whose keys are stock tickers in stock_data and whose
+        values are 1's and 0's depending on if the volume is higher or 
+        lower than the mean volume.
+        """
+
+        '''derive inputSymbols and stock volume dictionary from the stock_data'''
+        inputSymbols = self.statistics.sd_to_is(stock_data=stock_data)
+
+        points_per_stock = int(len(stock_data)/len(inputSymbols))
+
+        boolean_dic = {}
+
+        '''loop over stock tickers'''
+        timed_stock_data = []
+        for j in np.arange(len(inputSymbols)):
+            '''cut the data off so that we calculate the average of the
+            volume over the correct time interval'''
+            timed_stock_data.append(stock_data[(j+1)*points_per_stock-time: (j+1)*points_per_stock])
+
+        '''Reshape timed_stock_data so that it matches the data structure
+        as if we had called rh.get_stock_historicals with the time period
+        enforced originally'''
+        timed_stock_data = np.array(timed_stock_data)
+        timed_stock_data = timed_stock_data[0,:]
+            
+        stock_volume_dictionary = self.statistics.dictionary_data(stock_data=timed_stock_data, data_point='volume')
+
+        for i in np.arange(len(inputSymbols)):
+            volumes = stock_volume_dictionary['{}'.format(inputSymbols[i])]
+            mean_volume = np.mean(volumes)
+            current_volume = volumes[-1]
+
+            '''Here's the condition for buy/not buy signal to be produced'''
+            if strategy=='above':
+                if current_volume > mean_volume:
+                    boolean_dic['{}'.format(inputSymbols[i])] = 1.0
+                else:
+                    boolean_dic['{}'.format(inputSymbols[i])] = -1.0
+
+            elif strategy=='below':
+                if current_volums > mean_volume:
+                    boolean_dic['{}'.format(inputSymbols[i])] =	-1.0
+                else:
+                    boolean_dic['{}'.format(inputSymbols[i])] =	1.0
+
+            else:
+                raise TypeError('Invalid strategy type. Please enter either "above" or "below" for strategy')
+
+            
+        return boolean_dic
+        
+
+        
 
 
 class nn():
@@ -423,6 +507,7 @@ class nn():
         self.statistics = statistics
         self.un = un
         self.pw = pw
+        rh.login(un, pw)
 
     
     def get_tt_data(self, inputSymbols, num_bands=1, interval='day', span='year', ma_short=25, ma_long=200, rsi_cutoff=30, rsi_strategy='below', days_before=10, percent_gained=4.0, percent_training=80):
@@ -477,13 +562,10 @@ class nn():
         appropriately
         """
 
-        '''Login to robinhood account to access stock information'''
-        rh.login(self.un, self.pw)
-
         '''Calculate metrics for all of the inputSymbols and organize
         them in a list of zeros and ones where 0's indicate the output
         of each metric test'''
-        num_metrics = 3
+        num_metrics = 4
         tt_data = np.zeros([len(inputSymbols), num_metrics+1])
 
         '''loop over the stocks we're taking data from (probably
@@ -492,15 +574,16 @@ class nn():
         for i in np.arange(len(inputSymbols)):
             
             '''get stock data and calculate all the relevant metrics'''
-            stock_data = rh.get_stock_historicals(inputSymbols=str(inputSymbols[i]), interval=interval, span=span)
+            stock_data = rh.stocks.get_stock_historicals(inputSymbols=str(inputSymbols[i]), interval=interval, span=span)
             bbands_bottom = self.metrics.bbands_bottom(stock_data=stock_data[:-days_before], num_bands=1)
             ma_crossover = self.metrics.ma_crossover(stock_data=stock_data[:-days_before], short_period=ma_short, long_period=ma_long)
             rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, strategy=rsi_strategy)
+            volume_crossover = self.metrics.volume_crossover(stock_data=stock_data[:-days_before], time=100, strategy='above')
 
             '''Append to the tt_data a numpy array which looks like
-            (bbands_bottom, ma_crossover, rsi_cutoff) where each of these
+            (bbands_bottom, ma_crossover, rsi_cutoff, ...) where each of these
             is just a one or zero'''
-            tt_data[i,:-1] = np.array([bbands_bottom[inputSymbols[i]], ma_crossover[inputSymbols[i]], rsi_crossover[inputSymbols[i]]])
+            tt_data[i,:-1] = np.array([bbands_bottom[inputSymbols[i]], ma_crossover[inputSymbols[i]], rsi_crossover[inputSymbols[i]], volume_crossover[inputSymbols[i]]])
 
             '''loop over days between today and the last data taken for
             calculating the metrics. Then check if the stock has risen
@@ -575,6 +658,8 @@ class nn():
         loss - Give a string that is the tensorflow name of the loss
             function you want to use. You can also pass an instance
             of tf.keras.losses.Loss
+        metrics - Give a tensorflow metrics object which is the metric
+            used by the model to test its accuracy
 
         Returns
         Nothing. This does, however, set self.model equal to the tensorflow
@@ -592,12 +677,16 @@ class nn():
         #to each value in hidden_layers
         for i in np.arange(len(hidden_layers)):
             self.model.add(tf.keras.layers.Dense(hidden_layers[i]))
+
+        #create custom activation function
+        clipped_relu = lambda x: relu(x, threshold=0, max_value=1)
+        
         #Add output layer that just gives one number
         self.model.add(tf.keras.layers.Dense(1))
-        #Add relu layer where relu function is applied to the output of the previous layer
-        #Set relu threshold to 0.5 (this could change later)
-        self.model.add(tf.keras.layers.ReLU())
 
+        #Add activation layer using clipped_relu function
+        self.model.add(tf.keras.layers.Activation(clipped_relu))
+        
         #compile the neural network with its activation & loss functions
         self.model.compile(optimizer=optimizer, loss=loss)
 
@@ -651,7 +740,8 @@ class nn():
 
         Parameters
         stock - Give a string that is the stock ticker which
-            you want to make a prediction for.
+            you want to make a prediction for. This should be
+            one single ticker
         interval - Give the length of time you want the
             metrics  to be calculated over. Default
             is one day
@@ -683,19 +773,17 @@ class nn():
         and 0 corresponding to a not buy signal.
         """
 
-        #login and get data for stock
-        rh.login(self.un, self.pw)
-
-        stock_data = rh.get_stock_historicals(inputSymbols=stock, interval=interval, span=span)
+        stock_data = rh.stocks.get_stock_historicals(inputSymbols=stock, interval=interval, span=span)
 
         #Calculate metrics
         bbands_bottom = self.metrics.bbands_bottom(stock_data=stock_data[:-days_before], num_bands=1)
         ma_crossover = self.metrics.ma_crossover(stock_data=stock_data[:-days_before], short_period=ma_short, long_period=ma_long)
         rsi_crossover = self.metrics.rsi_crossover(stock_data=stock_data[:-days_before], rsi_cutoff=rsi_cutoff, strategy=rsi_strategy)
+        volume_crossover = self.metrics.volume_crossover(stock_data=stock_data[:-days_before], time=100, strategy='above')
 
         #input_data must be passed in batches. Even though here we are
         #only using one batch, we still have to double bracket the data
-        input_data = np.array([[bbands_bottom[stock[0]], ma_crossover[stock[0]], rsi_crossover[stock[0]]]])
+        input_data = np.array([[bbands_bottom[stock[0]], ma_crossover[stock[0]], rsi_crossover[stock[0]], volume_crossover[stock[0]]]])
         prediction = self.model.predict(input_data)
 
         return prediction
@@ -711,11 +799,25 @@ class nn():
         correct=0
         incorrect=0
 
+        k=0
+        l=0
         for i in np.arange(len(self.test_tickers)):
             print("making a prediction for ...      {}".format(self.test_tickers[i]))
             prediction = self.predict(stock=[str(self.test_tickers[i])])
+            if prediction==0:
+                binary_prediction=0
+            else:
+                binary_prediction=1
+                k+=1
 
-            if prediction == self.testing[i,-1]:
+                
+            if binary_prediction==1 and binary_prediction==self.testing[i,-1]:
+                l+=1
+            else:
+                pass
+
+                
+            if binary_prediction == self.testing[i,-1]:
                 correct+=1
                 print("Correctly predicted!")
             else:
@@ -726,6 +828,9 @@ class nn():
         print("")
         print("")
         print('{}/{} correctly predicted'.format(correct, correct+incorrect))
+        print("")
+        print("")
+        print("Of the {} stocks in the training data, {} of our predictions were correct.".format(k, l))
 
 
 
